@@ -1,0 +1,82 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Department {
+  id         String     @id @default(uuid())
+  nameArabic String
+  nameEnglish String?
+  employees  Employee[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+model Employee {
+  id           String       @id @default(uuid())
+  nameArabic   String
+  nameEnglish  String?
+  role         Role         @default(EMPLOYEE)
+  departmentId String
+  department   Department   @relation(fields: [departmentId], references: [id])
+  leaves       Leave[]
+  payrolls     Payroll[]
+  kpis         Performance[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+model Leave {
+  id         String      @id @default(uuid())
+  employeeId String
+  employee   Employee    @relation(fields: [employeeId], references: [id])
+  leaveType  String
+  startDate  String      // Stored as string to support Hijri format (e.g., "1448-04-15")
+  endDate    String
+  status     LeaveStatus @default(PENDING)
+  comments   String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+model Payroll {
+  id            String   @id @default(uuid())
+  employeeId    String
+  employee      Employee @relation(fields: [employeeId], references: [id])
+  period        String   // e.g., "1448-04"
+  baseSalary    Float
+  allowances    Float    @default(0)
+  deductions    Float    @default(0)
+  netAmount     Float
+  status        String   @default("PROCESSED")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Performance {
+  id          String   @id @default(uuid())
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  cycle       String   // e.g., "1448-H1"
+  kpiTitle    String
+  score       Float?
+  comments    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+enum Role {
+  EMPLOYEE
+  MANAGER
+  HR_STAFF
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
