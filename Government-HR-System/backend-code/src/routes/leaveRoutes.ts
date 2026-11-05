@@ -1,14 +1,35 @@
 import { Router } from 'express';
-import { submitLeave, approveLeave, getLeaveBalance } from '../controllers/leaveController';
-import { authenticate, authorize } from '../middleware/auth';
+import { submitLeave, listPendingLeaves, updateLeaveStatus, getMyLeaves } from '../controllers/leaveController';
+import { requireAuth, requireRole } from '../middleware/authMiddleware';
 
-export const leaveRouter = Router();
+const leaveRouter = Router();
 
-// Submit a new leave request (Employee only)
-leaveRouter.post('/', authenticate, authorize('Employee'), submitLeave);
+leaveRouter.post(
+  '/',
+  requireAuth,
+  requireRole('Employee'),
+  submitLeave
+);
 
-// Approve or reject a leave request (Manager only)
-leaveRouter.put('/:id/status', authenticate, authorize('Manager'), approveLeave);
+leaveRouter.get(
+  '/my',
+  requireAuth,
+  requireRole('Employee'),
+  getMyLeaves
+);
 
-// Retrieve leave balance
-leaveRouter.get('/balance', authenticate, getLeaveBalance);
+leaveRouter.get(
+  '/',
+  requireAuth,
+  requireRole('Manager'),
+  listPendingLeaves
+);
+
+leaveRouter.put(
+  '/:id/status',
+  requireAuth,
+  requireRole('Manager'),
+  updateLeaveStatus
+);
+
+export { leaveRouter };

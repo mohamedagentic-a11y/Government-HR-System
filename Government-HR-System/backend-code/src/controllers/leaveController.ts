@@ -1,149 +1,125 @@
-import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Request, Response, NextFunction } from 'express';
+import { leaveService } from '../services/leaveService';
 
-const prisma = new PrismaClient();
-
-interface AuthRequest extends Request {
-  user?: {
-    EmployeeID: string;
-    Role: string;
-  };
-}
-
-const generateMeta = () => ({
-  timestamp: new Date().toISOString(),
-});
-
-export const submitLeave = async (req: AuthRequest, res: Response) => {
+export async function submitLeave(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { LeaveType, StartDate, EndDate, Comments } = req.body;
-    const employeeId = req.user?.EmployeeID;
+    const user = (req as any).user;
+    const employeeId: string = user?.employeeId || user?.EmployeeID;
 
     if (!employeeId) {
-      return res.status(401).json({
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'User not authenticated.',
-        },
+      res.status(401).json({
+        error: { code: 'UNAUTHORIZED', message: 'Employee identity not found in token.' }
       });
+      return;
     }
+
+    const { LeaveType, StartDate, EndDate, Comments } = req.body;
 
     if (!LeaveType || !StartDate || !EndDate) {
-      return res.status(400).json({
-        error: {
-          code: 'VALIDATION_FAILED',
-          message: 'LeaveType, StartDate, and EndDate are required.',
-        },
+      res.status(400).json({
+        error: { code: 'VALIDATION_FAILED', message: 'LeaveType, StartDate, and EndDate are required.' }
       });
+      return;
     }
 
-    const leave = await prisma.leave.create({
-      data: {
-        EmployeeID: employeeId,
-        LeaveType,
-        StartDate,
-        EndDate,
-        Comments: Comments || '',
-        Status: 'Pending',
-      },
+    const result = await leaveService.submitLeaveRequest({
+      employeeId,
+      leaveType: LeaveType,
+      startDate: StartDate,
+      endDate: EndDate,
+      comments: Comments,
     });
 
-    return res.status(201).json({
-      data: {
-        LeaveID: leave.id,
-        Status: leave.Status,
-      },
-      meta: generateMeta(),
+    res.status(201).json({
+      data: result,
+      meta: { timestamp: new Date().toISOString() },
     });
-  } catch (error) {
-    return res.status(500).json({
-      error: {
-        code: 'INTERNAL_SERVER_ERROR',
-        message: 'An error occurred while submitting the leave request.',
-      },
-    });
+  } catch (err) {
+    next(err);
   }
-};
+}
 
-export const approveLeave = async (req: AuthRequest, res: Response) => {
+export async function listPendingLeaves(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { id } = req.params;
+    const pendingLeaves = await leaveService.getPendingLeaves();
+
+    res.status(200).json({
+      data: pendingLeaves,
+      meta: { timestamp: new Date().toISOString() },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateLeaveStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const user = (req as any).user;
+    const approverId: string = user?.employeeId || user?.EmployeeID;
+
+    if (!approverId) {
+      res.status(401).json({
+        error: { code: 'UNAUTHORIZED', message: 'Approver identity not found in token.' }
+      });
+      return;
+    }
+
+    const leaveId = req.params.id;
+
+    if (!leaveId) {
+      res.status(400).json({
+        error: { code: 'VALIDATION_FAILED', message: 'Leave ID is required.' }
+      });
+      return;
+    }
+
     const { Status, Comments } = req.body;
-    const role = req.user?.Role;
 
-    if (role !== 'Manager' && role !== 'HR') {
-      return res.status(403).json({
-        error: {
-          code: 'FORBIDDEN',
-          message: 'Only managers can approve or reject leaves.',
-        },
+    if (!Status || (Status !== 'Approved' && Status !== 'Rejected')) {
+      res.status(400).json({
+        error: { code: 'VALIDATION_FAILED', message: 'Status must be "Approved" or "Rejected".' }
       });
+      return;
     }
 
-    if (!Status || !['Approved', 'Rejected'].includes(Status)) {
-      return res.status(400).json({
-        error: {
-          code: 'VALIDATION_FAILED',
-          message: 'Status must be Approved or Rejected.',
-        },
-      });
-    }
-
-    const updatedLeave = await prisma.leave.update({
-      where: { id },
-      data: {
-        Status,
-        ManagerComments: Comments || '',
-      },
+    await leaveService.updateLeaveStatus({
+      leaveId,
+      approverId,
+      status: Status as 'Approved' | 'Rejected',
+      comments: Comments,
     });
 
-    return res.status(200).json({
-      data: {
-        LeaveID: updatedLeave.id,
-        Status: updatedLeave.Status,
-      },
-      meta: generateMeta(),
+    res.status(200).json({
+      data: { leaveId, status: Status },
+      meta: { timestamp: new Date().toISOString() },
     });
-  } catch (error) {
-    return res.status(500).json({
-      error: {
-        code: 'INTERNAL_SERVER_ERROR',
-        message: 'An error occurred while updating the leave status.',
-      },
-    });
+  } catch (err) {
+    next(err);
   }
-};
+}
 
-export const getLeaveBalance = async (req: AuthRequest, res: Response) => {
+export async function getMyLeaves(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const employeeId = req.user?.EmployeeID;
+    const user = (req as any).user;
+    const employeeId: string = user?.employeeId || user?.EmployeeID;
 
     if (!employeeId) {
-      return res.status(401).json({
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'User not authenticated.',
-        },
+      res.status(401).json({
+        error: { code: 'UNAUTHORIZED', message: 'Employee identity not found in token.' }
       });
+      return;
     }
 
-    const balance = await prisma.leaveBalance.findUnique({
-      where: { EmployeeID: employeeId },
-    });
+    const [leaves, balance] = await Promise.all([
+      leaveService.getEmployeeLeaves(employeeId),
+      leaveService.getLeaveBalance(employeeId),
+    ]);
 
-    return res.status(200).json({
-      data: {
-        AnnualBalance: balance?.AnnualBalance || 0,
-        SickBalance: balance?.SickBalance || 0,
-      },
-      meta: generateMeta(),
+    res.status(200).json({
+      data: { leaves, balance },
+      meta: { timestamp: new Date().toISOString() },
     });
-  } catch (error) {
-    return res.status(500).json({
-      error: {
-        code: 'INTERNAL_SERVER_ERROR',
-        message: 'An error occurred while fetching leave balance.',
-      },
-    });
+  } catch (err) {
+    next(err);
   }
-};
+}
