@@ -1,8 +1,28 @@
 import { Router } from 'express';
-import { runPayroll, previewPayroll } from '../controllers/payrollController';
-import { authenticate, authorize } from '../middleware/auth';
+import { runPayroll, previewPayroll, finalizePayroll } from '../controllers/payrollController';
+import { requireAuth, requireRole } from '../middleware/authMiddleware';
 
-export const payrollRouter = Router();
+const payrollRouter = Router();
 
-payrollRouter.post('/run', authenticate(), authorize('HR Staff'), runPayroll);
-payrollRouter.get('/preview', authenticate(), authorize('HR Staff'), previewPayroll);
+payrollRouter.get(
+  '/preview',
+  requireAuth,
+  requireRole('HR Staff'),
+  previewPayroll
+);
+
+payrollRouter.post(
+  '/run',
+  requireAuth,
+  requireRole('HR Staff'),
+  runPayroll
+);
+
+payrollRouter.post(
+  '/finalize',
+  requireAuth,
+  requireRole('HR Staff'),
+  finalizePayroll
+);
+
+export { payrollRouter };

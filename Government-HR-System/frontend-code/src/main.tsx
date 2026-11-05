@@ -1,26 +1,17 @@
-import React from 'react';
-import { createRoot } from 'react-dom/client';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { BrowserRouter } from 'react-router-dom';
-import { App } from './App';
-import { LanguageProvider } from './i18n/LanguageContext';
 import './index.css';
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
+import { Provider } from 'react-redux';
+import App from './App';
+import { store } from './store/store';
 
-const queryClient = new QueryClient();
-
-const rootElement = document.getElementById('root');
-if (!rootElement) {
-  throw new Error('Failed to find the root element');
-}
-
-createRoot(rootElement).render(
+ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
+    <Provider store={store}>
       <BrowserRouter>
-        <LanguageProvider>
-          <App />
-        </LanguageProvider>
+        <App />
       </BrowserRouter>
-    </QueryClientProvider>
+    </Provider>
   </React.StrictMode>
 );
